@@ -1,0 +1,7 @@
+python==3.12.1
+h5py==3.13.0
+numpy==2.2.4
+torch==2.6.0
+scikit-learn==1.6.1
+pandas==2.2.3
+actipy==3.8.0
