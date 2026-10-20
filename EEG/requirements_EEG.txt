@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# EEG & Sleep Processing
+mne>=1.6.0
+yasa>=0.6.3
+sleep-eeg-py>=0.1.0      # Note: check exact PyPI name or use git+https if it's only on GitHub
+mne-icalabel>=0.6        # Useful for artifact rejection in PyPrep/ICA
+pyedflib>=0.1.36         # For streaming EDF files
+
+# Note: SleepEEGpy relies on PyPREP, YASA, and SpecParam. 
+# You may need to install it directly from source if not on PyPI:
+# git+https://github.com/<username>/SleepEEGpy.git

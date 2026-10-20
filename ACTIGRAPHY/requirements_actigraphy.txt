@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Time-Series & Tabular
+polars>=0.20.0           # Extremely fast for streaming chunks of Apple Watch CSVs
+                         # (pandas is already in base, but polars is great for large CSV chunks)
+
+# Movement Feature Extraction
+tsfresh>=0.20.0          # Great for extracting movement features from XYZ accel data
