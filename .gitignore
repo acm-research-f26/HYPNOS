@@ -1,0 +1,21 @@
+# Python environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Datasets
+ACTIGRAPHY/data/raw/
+ACTIGRAPHY/data/processed/
+
+# Trained models
+*.pth
+*.pt
+
+# Outputs
+ACTIGRAPHY/outputs/
+
+# Environment variables
+.env
