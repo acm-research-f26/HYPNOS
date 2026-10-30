@@ -105,7 +105,7 @@ def normalize_features(mel_db):
 
 
 # ------------------------------------------------------------
-# 5. SPLIT AUDIO INTO 30-SECOND SEGMENTS
+# 5. SPLIT AUDIO INTO 40-SECOND SEGMENTS
 # ------------------------------------------------------------
 
 def split_audio_into_segments(audio):
@@ -211,7 +211,7 @@ def test_audio_processing(file_path):
 
     print()
     print(
-        "Number of 30-second segments:",
+        f"Number of {SEGMENT_SECONDS}-second segments:",
         len(segments)
     )
 
