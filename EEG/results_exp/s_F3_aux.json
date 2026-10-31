@@ -1,0 +1,36 @@
+{
+ "args": {
+  "name": "s_F3_aux",
+  "K": 1,
+  "comb": "mlp",
+  "aug": false,
+  "aux": true,
+  "patients": 200,
+  "epochs": 3,
+  "lr": 0.002,
+  "bs": 256,
+  "patience": 2,
+  "init": null
+ },
+ "best_val_auroc": 0.7600697800068845,
+ "history": [
+  {
+   "epoch": 0,
+   "train_loss": 0.7961999293445616,
+   "val_auroc": 0.674208961533442,
+   "sec": 194.9534990787506
+  },
+  {
+   "epoch": 1,
+   "train_loss": 0.7133494858131852,
+   "val_auroc": 0.7004519930066001,
+   "sec": 78.8447699546814
+  },
+  {
+   "epoch": 2,
+   "train_loss": 0.6761892033639805,
+   "val_auroc": 0.7600697800068845,
+   "sec": 79.04155969619751
+  }
+ ]
+}
