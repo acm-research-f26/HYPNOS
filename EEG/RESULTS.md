@@ -129,6 +129,27 @@ Full comparison, 5 Hz zero-phase high-pass, side loss, **400 training patients**
 - A second channel adds about 0.015 test AUROC (0.806 → 0.821, MCC 0.35 → 0.38). The test set has 99 patients and one run per model, so this is suggestive, not established.
 - Either channel alone works, so a device that loses a channel degrades gracefully instead of failing.
 
+## Limitations
+**Match to the target device**
+- The target hardware band is about 5–50 Hz (Butterworth, 4–8 channels). Everything here is 5–42 Hz: the CinC cache was low-passed at 42 Hz and the raw 200 Hz CinC files are not on disk. Passing 42–50 Hz to a model trained without it lost 0.02–0.04 AUROC on UCDDB and MIT-BIH.
+- The device filter's order and causality are unknown; 4th-order is a guess. A mismatch between the training filter and the deployment filter (zero-phase vs causal) cost about 0.15–0.20 AUROC, so training must use the exact device filter.
+- Causal windows were filtered per window from zero state (start-up transient in the first ≈ 0.5 s); the device filters continuously. No mains notch was applied, and a 50 Hz upper edge passes 50 Hz mains.
+- The data are clinical PSG electrodes (C4-M1, C3-M2), not the device's dry or wet electrodes or montage. Nothing here has been run on device data; paired device + PSG recordings are needed.
+- Multi-channel evidence is two channels from one lab (CinC). UCDDB, MIT-BIH and DREAMS were prepared with one channel, so the two-channel gain is untested outside CinC. Four to eight channels, other montages and missing-channel patterns beyond dropping one of two are untested.
+
+**Statistical strength**
+- Every condition is one training run. Seed-to-seed spread was about 0.006 AUROC in the screens, so differences under ≈ 0.01 are noise.
+- External sets are small (UCDDB 25, MIT-BIH 18, DREAMS 12 patients); burden ρ on 12–25 patients has wide intervals.
+- The two-channel comparison used 400 training patients, because the 796-patient run did not fit in memory; those numbers are not comparable with the 796-patient rows.
+- Ensemble members were chosen after seeing test scores. Hypotheses such as "the 5 Hz high-pass reduces hospital-specific drift" and "50 Hz mains explains the 42 → 50 Hz drop" were not tested.
+- Only one 5 Hz configuration was tried, and several settings were compared on the same test sets without correction.
+
+**Task and labels**
+- Output is per-30 s-window apnea/hypopnea detection, not an AHI. Absolute performance is modest (sensitivity 0.3–0.5 at the validation threshold, MCC 0.2–0.4); the AUROC is partly wake-versus-sleep separation (sleep-only AUROC is 0.02–0.05 lower).
+- Labels differ by source: MIT-BIH marks "event present in the epoch" rather than ≥10 s overlap, and hypopnea scoring rules (3% vs 4%) vary between datasets and scorers.
+- CinC contains adults referred for suspected sleep disorders; UCDDB, MIT-BIH and DREAMS are small, mixed-quality sets. Pediatrics, home use and population differences are not covered.
+- Not a medical device and not validated for diagnosis or screening.
+
 ## Caveats
 - Absolute performance is modest: sensitivity 0.30–0.52 at the val-chosen threshold. External MCC is 0.21–0.34.
 - The val-chosen threshold (raw logit 0.054) transfers poorly in prevalence: external sets have 15–35% prevalence vs 12% in CinC, so sensitivity drops there.
