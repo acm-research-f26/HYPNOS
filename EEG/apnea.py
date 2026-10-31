@@ -44,6 +44,7 @@ class Win:
 
     def __init__(s, X, y, stage, rec, widx):
         s.X, s.y, s.stage, s.rec, s.widx = X, y, stage, rec, widx
+        s.Xs = [X]  # one array per EEG channel; channel 0 is C4-M1
 
     def ctx(s, K):
         i, n = np.arange(len(s.y)), len(s.y)
@@ -61,9 +62,14 @@ def meta():
     return {k: m[k] for k in m.files}
 
 
-def get(m, rows):
+def get(m, rows, mc=False):
+    """Windows for `rows`; with mc also the second channel (C3-M2, from build_cache_c3.py) as w.Xs[1]."""
     X = np.memmap(CACHE / "X_all.f16", np.float16, "r", shape=(len(m["y"]), T))
-    return Win(band(np.ascontiguousarray(X[rows])), *(m[k][rows] for k in ("y", "stage", "rec", "widx")))
+    w = Win(band(np.ascontiguousarray(X[rows])), *(m[k][rows] for k in ("y", "stage", "rec", "widx")))
+    if mc:
+        X2 = np.memmap(CACHE / "X2_all.f16", np.float16, "r", shape=(len(m["y"]), T))
+        w.Xs.append(band(np.ascontiguousarray(X2[rows])))
+    return w
 
 
 def train_rows(m, n_patients, neg_ratio=2, seed=0):
@@ -151,6 +157,25 @@ class Ctx(nn.Module):
         return self.combine(self.encode(x.reshape(b * x.shape[1], 1, -1)).reshape(b, x.shape[1], -1))
 
 
+class MC(Ctx):
+    """Channel-flexible Ctx: the shared encoder runs on every channel and a masked mean over channels feeds the same head,
+    so any number of channels works. Training drops one channel at random (channel dropout)."""
+
+    def __init__(self, K=1, aux=False):
+        super().__init__(K, aux)
+        self.register_buffer("mc", torch.ones(1))  # marks the checkpoint as channel-flexible
+
+    def encode(self, x):  # [B,C,T] -> [B,128]
+        b, c, t = x.shape
+        return self.enc(x.reshape(b * c, 1, t)).reshape(b, c, -1).mean(1)
+
+    def forward(self, x, mask):  # x [B,C,W,T], mask [B,C] (1 = channel present)
+        b, c, w, t = x.shape
+        mk = mask[:, :, None, None]
+        e = self.enc(x.reshape(b * c * w, 1, t)).reshape(b, c, w, -1)
+        return self.combine((e * mk).sum(1) / mk.sum(1))
+
+
 class GRU(nn.Module):
     """CNN front end + BiGRU over time on a single window (model C)."""
 
@@ -181,16 +206,20 @@ def load(name):
         m = GRU()
     else:
         sd = {k.replace("head.0.", "comb.0.").replace("head.3.", "out."): v for k, v in sd.items()}
-        m = Ctx((sd["comb.0.weight"].shape[1] // 128 - 1) // 2, "stage.weight" in sd)
+        m = (MC if "mc" in sd else Ctx)((sd["comb.0.weight"].shape[1] // 128 - 1) // 2, "stage.weight" in sd)
     m.load_state_dict(sd)
     return m.to(DEV)
 
 
 @torch.no_grad()
-def score(model, w, bs=1024):
-    """Logit for every window. A context model encodes each window once and reuses it for its neighbours."""
+def score(model, w, bs=1024, chans=None):
+    """Logit for every window. A context model encodes each window once and reuses it for its neighbours.
+    A channel-flexible model uses the channels in `chans` (default: all that the windows have)."""
     model.eval()
-    x = lambda a: torch.from_numpy(w.X[a:a + bs]).to(DEV).float()[:, None]
+    cs = [w.Xs[c] for c in (chans or range(len(w.Xs))) if c < len(w.Xs)] if isinstance(model, MC) else [w.X]
+    if not cs:  # none of the requested channels exist in this set
+        return np.full(len(w.y), np.nan, np.float32)
+    x = lambda a: torch.from_numpy(np.stack([X[a:a + bs] for X in cs], 1)).to(DEV).float()
     n = range(0, len(w.y), bs)
     if not hasattr(model, "encode"):
         return torch.cat([model(x(a)) for a in n]).cpu().numpy()
@@ -206,7 +235,8 @@ def batches(tr, order, bs, stage):
     def work():
         for b in range(len(order) // bs):
             i = order[b * bs:(b + 1) * bs]
-            q.put([torch.from_numpy(a) for a in (tr.X[tr.ptr[i]], tr.y[i], stage[i])])
+            x = tr.X[tr.ptr[i]] if len(tr.Xs) == 1 else np.stack([X[tr.ptr[i]] for X in tr.Xs], 1)
+            q.put([torch.from_numpy(a) for a in (x, tr.y[i], stage[i])])
         q.put(None)
 
     threading.Thread(target=work, daemon=True).start()
@@ -216,15 +246,15 @@ def batches(tr, order, bs, stage):
 
 def train(a):
     m, K = meta(), a.K
-    val = get(m, np.flatnonzero(m["split"] == 1))
+    val = get(m, np.flatnonzero(m["split"] == 1), a.mc)
     keep = train_rows(m, a.patients)
     rows = np.unique(np.concatenate([(keep + d).clip(0, len(m["y"]) - 1) for d in range(-K, K + 1)]))
-    tr, samp = get(m, rows).ctx(K), np.searchsorted(rows, keep)
+    tr, samp = get(m, rows, a.mc).ctx(K), np.searchsorted(rows, keep)
     stage = np.array([STAGE.get(s, 0) for s in tr.stage])
     print(f"{a.name}: {len(samp)} train samples ({100 * tr.y[samp].mean():.1f}% pos), {len(val.y)} val", flush=True)
 
     torch.manual_seed(a.seed)
-    model = Ctx(K, a.aux).to(DEV)
+    model = (MC if a.mc else Ctx)(K, a.aux).to(DEV)
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-2)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=a.epochs * (len(samp) // a.bs), pct_start=0.15)
     rng, best, bad, hist = np.random.default_rng(a.seed), -1, 0, []
@@ -234,7 +264,13 @@ def train(a):
         t0, tot, nb = time.time(), 0.0, len(samp) // a.bs
         for b, (x, y, st) in enumerate(batches(tr, rng.permutation(samp), a.bs, stage)):
             with torch.autocast(DEV, torch.float16, enabled=a.amp):
-                logit, st_logit = model(x.to(DEV).float())
+                if a.mc:  # channel dropout: with prob chdrop one random channel is hidden
+                    mask = torch.ones(len(x), x.shape[1])
+                    hide = torch.from_numpy(rng.random(len(x)) < a.chdrop)
+                    mask[hide, torch.from_numpy(rng.integers(0, x.shape[1], len(x)))[hide]] = 0
+                    logit, st_logit = model(x.to(DEV).float(), mask.to(DEV))
+                else:
+                    logit, st_logit = model(x.to(DEV).float())
             loss = F.binary_cross_entropy_with_logits(logit.float(), y.to(DEV).float())
             if st_logit is not None:
                 loss = loss + a.aux_w * F.cross_entropy(st_logit.float(), st.to(DEV))
@@ -257,14 +293,14 @@ def train(a):
 
 
 # ------------------------------------------------------------------ scoring and metrics
-def score_all(names, suffix=""):
+def score_all(names, suffix="", mc=False, chans=None):
     m = meta()
-    sets = {"val": get(m, np.flatnonzero(m["split"] == 1)), "test": get(m, np.flatnonzero(m["split"] == 2)), **external()}
+    sets = {"val": get(m, np.flatnonzero(m["split"] == 1), mc), "test": get(m, np.flatnonzero(m["split"] == 2), mc), **external()}
     (OUT / "scores").mkdir(parents=True, exist_ok=True)
     for name in names:
         model, arrs = load(name), {}
         for k, w in sets.items():
-            arrs |= {f"{k}__y": w.y, f"{k}__s": score(model, w), f"{k}__rec": w.rec, f"{k}__stage": w.stage}
+            arrs |= {f"{k}__y": w.y, f"{k}__s": score(model, w, chans=chans), f"{k}__rec": w.rec, f"{k}__stage": w.stage}
             if hasattr(w, "channel"):
                 arrs[f"{k}__channel"] = w.channel
         np.savez(OUT / "scores" / f"{name}{suffix}.npz", **arrs)
@@ -344,9 +380,13 @@ if __name__ == "__main__":
     t.add_argument("--hp", type=float, default=0.0, help="extra high-pass cutoff in Hz")
     t.add_argument("--amp", action="store_true", help="fp16 autocast (about 1.3x faster steps)")
     t.add_argument("--causal", action="store_true", help="forward-only high-pass")
+    t.add_argument("--mc", action="store_true", help="two-channel (C4-M1 + C3-M2) channel-flexible model")
+    t.add_argument("--chdrop", type=float, default=0.3, help="with --mc: probability of hiding one channel per sample")
     sc, rp = sub.add_parser("score"), sub.add_parser("report")
     sc.add_argument("--causal", action="store_true", help="forward-only high-pass")
     sc.add_argument("--ext", help="folder with external-set windows (default data/processed/external)")
+    sc.add_argument("--mc", action="store_true", help="load the second channel (needed for channel-flexible models)")
+    sc.add_argument("--chans", help="comma-separated channel indices to use, e.g. 0 or 0,1 (default: all)")
     sc.add_argument("--suffix", default="", help="appended to the saved score file name")
     sc.add_argument("names", nargs="+")
     sc.add_argument("--hp", type=float, default=0.0, help="must match the --hp the model was trained with")
@@ -355,4 +395,4 @@ if __name__ == "__main__":
     a = p.parse_args()
     HP, CAUSAL = getattr(a, "hp", 0.0), getattr(a, "causal", False)
     EXT = Path(getattr(a, "ext", None) or EXT)
-    {"train": lambda: train(a), "score": lambda: score_all(a.names, a.suffix), "report": lambda: report(a.names, a.plots)}[a.cmd]()
+    {"train": lambda: train(a), "score": lambda: score_all(a.names, a.suffix, a.mc, [int(c) for c in a.chans.split(",")] if a.chans else None), "report": lambda: report(a.names, a.plots)}[a.cmd]()

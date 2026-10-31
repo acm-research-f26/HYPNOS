@@ -7,13 +7,14 @@ Results, ablations and caveats are in [RESULTS.md](RESULTS.md); plots are in `pl
 ## Files
 - `apnea.py`: data loading, models, training, scoring and ensemble reports (one file).
 - `build_cache.py`: cleans CinC 2018 windows and writes the float16 cache and patient split.
+- `build_cache_c3.py`: adds the second channel (C3-M2) for the channel-flexible model (`--mc`).
 - `prep_external.py`: UCDDB / MIT-BIH / DREAMS to windows (`--lowpass HZ --out DIR` for other bands).
 - `preprocess.py`: filter / resample / segment / label helpers used by the two scripts above.
 - `requirements_apnea.txt`: Python packages.
 
 ## Commands
 ```
-python apnea.py train NAME [--K 1 --aux --hp 5 --causal --patients 0 --epochs 14]
+python apnea.py train NAME [--K 1 --aux --hp 5 --causal --mc --patients 0 --epochs 14]
 python apnea.py score NAME... [--hp HZ --causal]
 python apnea.py report NAME... [--plots FILE]     # several names = ensemble
 ```

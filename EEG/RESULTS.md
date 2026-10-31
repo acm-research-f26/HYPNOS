@@ -111,6 +111,24 @@ A causal filter is fine, but the training pipeline must use the same filter as t
 
 Passing 42–50 Hz to a model trained without it costs 0.03–0.04 AUROC on UCDDB and 0.02–0.03 on MIT-BIH. UCDDB was recorded with 50 Hz mains, which a 50 Hz low-pass lets through; whether mains explains the drop was not tested. To use a 5–50 Hz device band, train on data filtered to the same band (needs the raw CinC again) and add a mains notch.
 
+## Multi-channel: a channel-flexible model
+The hardware has several channels, so the model should accept any number. `MC` (`--mc`) runs the same shared ResNet encoder on every channel, averages the channel embeddings (masked, so any subset works) and feeds the usual prev/current/next head. During training one channel is hidden at random with probability 0.3 (channel dropout). Channels here: C4-M1 and C3-M2 from CinC (`build_cache_c3.py`). UCDDB, MIT-BIH and DREAMS were prepared with one channel only, so their rows are single-channel for both models.
+
+Screen (200 patients, 3 epochs, no high-pass), AUROC: one model scored three ways: both channels val 0.776 / test 0.782; C4 only 0.765 / 0.771; C3 only 0.767 / 0.772 (single-channel F with the side loss: val 0.760–0.764).
+
+Full comparison, 5 Hz zero-phase high-pass, side loss, **400 training patients** (the 796-patient two-channel run needed 14 GB and stalled on swap, so both models use 400). Single run each; the 400-patient models are not comparable with the 796-patient rows above. AUROC, threshold = max MCC on val:
+
+| Model | val | CinC test | UCDDB | MIT-BIH | DREAMS |
+|---|---|---|---|---|---|
+| single channel (C4) | 0.791 | 0.802 | 0.778 | 0.689 | 0.784 |
+| MC, C4 only | 0.813 | 0.806 | 0.791 | 0.693 | 0.807 |
+| MC, C3 only | – | 0.809 | – | – | – |
+| MC, C3 + C4 | 0.813 | **0.821** | 0.791 | 0.693 | 0.807 |
+
+- The channel-flexible model beats the single-channel model with the same data even when it is given only C4 (test 0.806 vs 0.802, external +0.003 to +0.023). Channel dropout seems to be a useful regulariser; this was not isolated.
+- A second channel adds about 0.015 test AUROC (0.806 → 0.821, MCC 0.35 → 0.38). The test set has 99 patients and one run per model, so this is suggestive, not established.
+- Either channel alone works, so a device that loses a channel degrades gracefully instead of failing.
+
 ## Caveats
 - Absolute performance is modest: sensitivity 0.30–0.52 at the val-chosen threshold. External MCC is 0.21–0.34.
 - The val-chosen threshold (raw logit 0.054) transfers poorly in prevalence: external sets have 15–35% prevalence vs 12% in CinC, so sensitivity drops there.
@@ -123,5 +141,5 @@ Passing 42–50 Hz to a model trained without it costs 0.03–0.04 AUROC on UCDD
 919,246 → 889,988 windows. Dropped: 27,046 unscored (stage ""), 1,965 flat (z-scored std < 0.5), 247 stuck/clipped (>50 % identical consecutive samples), 0 non-finite. Patient split 80/10/10 seed 0: 796 / 99 / 99 patients. External sets also drop unscored/flat windows.
 
 ## Files
-`prep_external.py` (UCDDB / MIT-BIH / DREAMS to windows; `--lowpass HZ --out DIR` for other bands), `build_cache.py` (clean + float16 memmap + split), `apnea.py` (data, models, training, scoring, ensemble reports), `preprocess.py` (helpers). Plots for model F are in `plots/`. Data, checkpoints and raw window scores are not included.
+`prep_external.py` (UCDDB / MIT-BIH / DREAMS to windows; `--lowpass HZ --out DIR` for other bands), `build_cache.py` (clean + float16 memmap + split), `build_cache_c3.py` (second channel), `apnea.py` (data, models, training, scoring, ensemble reports), `preprocess.py` (helpers). Plots for model F are in `plots/`. Data, checkpoints and raw window scores are not included.
 Note: UCDDB was preprocessed with the helper functions from preprocess.py rather than `process_subject` (which prints a lot and doesn't save stage).
