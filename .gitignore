@@ -25,3 +25,4 @@ audio_predictions.csv
 # Trained model weights
 *.keras
 *.h5
+!audio_model/hypnos_audio_v2.keras
