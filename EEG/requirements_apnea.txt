@@ -1,6 +1,7 @@
 numpy
 scipy
 pyedflib
+wfdb
 torch
 scikit-learn
 matplotlib

@@ -57,6 +57,11 @@ class Win:
         return s
 
 
+def hp_name(prefix):
+    """File name of the pre-filtered cache written by build_cache_hp.py."""
+    return f"{prefix}_hp{HP:g}{'c' if CAUSAL else ''}.f16"
+
+
 def meta():
     m = np.load(CACHE / "meta.npz")
     return {k: m[k] for k in m.files}
@@ -69,6 +74,16 @@ def get(m, rows, mc=False):
     if mc:
         X2 = np.memmap(CACHE / "X2_all.f16", np.float16, "r", shape=(len(m["y"]), T))
         w.Xs.append(band(np.ascontiguousarray(X2[rows])))
+    return w
+
+
+def train_mmap(m, mc):
+    """All cleaned windows as memory-mapped pre-filtered arrays: no copy in RAM, so a big training set cannot cause swapping."""
+    n = len(m["y"])
+    mm = lambda p: np.memmap(CACHE / hp_name(p), np.float16, "r", shape=(n, T))
+    w = Win(mm("X"), *(m[k] for k in ("y", "stage", "rec", "widx")))
+    if mc:
+        w.Xs.append(mm("X2"))
     return w
 
 
@@ -249,7 +264,10 @@ def train(a):
     val = get(m, np.flatnonzero(m["split"] == 1), a.mc)
     keep = train_rows(m, a.patients)
     rows = np.unique(np.concatenate([(keep + d).clip(0, len(m["y"]) - 1) for d in range(-K, K + 1)]))
-    tr, samp = get(m, rows, a.mc).ctx(K), np.searchsorted(rows, keep)
+    if a.mmap:  # needs build_cache_hp.py output; window indices are global rows
+        tr, samp = train_mmap(m, a.mc).ctx(K), keep
+    else:
+        tr, samp = get(m, rows, a.mc).ctx(K), np.searchsorted(rows, keep)
     stage = np.array([STAGE.get(s, 0) for s in tr.stage])
     print(f"{a.name}: {len(samp)} train samples ({100 * tr.y[samp].mean():.1f}% pos), {len(val.y)} val", flush=True)
 
@@ -380,6 +398,7 @@ if __name__ == "__main__":
     t.add_argument("--hp", type=float, default=0.0, help="extra high-pass cutoff in Hz")
     t.add_argument("--amp", action="store_true", help="fp16 autocast (about 1.3x faster steps)")
     t.add_argument("--causal", action="store_true", help="forward-only high-pass")
+    t.add_argument("--mmap", action="store_true", help="train from the memory-mapped cache of build_cache_hp.py (low RAM)")
     t.add_argument("--mc", action="store_true", help="two-channel (C4-M1 + C3-M2) channel-flexible model")
     t.add_argument("--chdrop", type=float, default=0.3, help="with --mc: probability of hiding one channel per sample")
     sc, rp = sub.add_parser("score"), sub.add_parser("report")

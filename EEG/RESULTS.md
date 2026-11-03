@@ -129,6 +129,19 @@ Full comparison, 5 Hz zero-phase high-pass, side loss, **400 training patients**
 - A second channel adds about 0.015 test AUROC (0.806 → 0.821, MCC 0.35 → 0.38). The test set has 99 patients and one run per model, so this is suggestive, not established.
 - Either channel alone works, so a device that loses a channel degrades gracefully instead of failing.
 
+## Ensemble of the best models (members chosen on validation only)
+Candidates: the eight full-data and 400-patient models from the experiments. Greedy forward selection on validation AUROC (scores standardised with each model's own validation mean/std, then averaged) added `mc_hp5_big` (two-channel, 0.8256), then `full_F3_aux` (0.8300), and stopped when a third member added under 0.001. No test score was used to choose members. Test and external rows are one run each; threshold = max MCC on validation.
+
+| Set | `mc_hp5_big` alone, AUROC | + `full_F3_aux`, AUROC | MCC alone → ensemble | burden ρ alone → ensemble |
+|---|---|---|---|---|
+| val | 0.826 | 0.830 | – | – |
+| CinC test | 0.837 | 0.840 | 0.407 → 0.406 | 0.57 → 0.57 |
+| UCDDB | 0.806 | 0.811 | 0.393 → 0.367 | 0.71 → 0.65 |
+| MIT-BIH | 0.711 | 0.710 | 0.246 → 0.233 | 0.57 → 0.50 |
+| DREAMS | 0.800 | 0.808 | 0.356 → 0.331 | 0.30 → 0.20 |
+
+The ensemble does not beat the best single model by more than noise (+0.003 to +0.008 AUROC on three sets, −0.001 on MIT-BIH; MCC and burden ρ are slightly lower). The earlier ensemble gain (+0.013 over F) came from averaging weaker, more varied models; once one model is strong, a second model of the same family adds little. The members are not equivalent in deployment: `full_F3_aux` is zero-phase, single-channel and 0.5–42 Hz. For the device, use the single two-channel model, retrained with the device filter.
+
 ## Limitations
 **Match to the target device**
 - The target hardware band is about 5–50 Hz (Butterworth, 4–8 channels). Everything here is 5–42 Hz: the CinC cache was low-passed at 42 Hz and the raw 200 Hz CinC files are not on disk. Passing 42–50 Hz to a model trained without it lost 0.02–0.04 AUROC on UCDDB and MIT-BIH.
@@ -162,5 +175,5 @@ Full comparison, 5 Hz zero-phase high-pass, side loss, **400 training patients**
 919,246 → 889,988 windows. Dropped: 27,046 unscored (stage ""), 1,965 flat (z-scored std < 0.5), 247 stuck/clipped (>50 % identical consecutive samples), 0 non-finite. Patient split 80/10/10 seed 0: 796 / 99 / 99 patients. External sets also drop unscored/flat windows.
 
 ## Files
-`prep_external.py` (UCDDB / MIT-BIH / DREAMS to windows; `--lowpass HZ --out DIR` for other bands), `build_cache.py` (clean + float16 memmap + split), `build_cache_c3.py` (second channel), `apnea.py` (data, models, training, scoring, ensemble reports), `preprocess.py` (helpers). Plots for model F are in `plots/`. Data, checkpoints and raw window scores are not included.
+`prep_external.py` (UCDDB / MIT-BIH / DREAMS → data/processed/external; `--lowpass HZ --out DIR` for other bands), `preprocess_cinc2018.py` (CinC 2018 → data/processed/cinc2018), `build_cache.py` (clean + float16 memmap + split), `build_cache_c3.py` (second channel), `build_cache_hp.py` (high-passed cache for `--mmap`), `apnea.py` (data, models, training, scoring, ensemble reports in one file; reads every checkpoint below and reproduces their saved scores exactly). Earlier versions of the same code: `common.py`, `models_new.py`, `train_new.py`, `evaluate_new.py`, `report_new.py`, `exp.py`, `eval_exp.py`, `ens_eval.py`, `run_screen.sh`, `run_full.sh`. Outputs in `results_final/`: `metrics.json`, `metrics_screen.json`, `plots/` (ROC, confusion matrices, burden scatter for F), `models/` (checkpoints), `scores/` (raw window scores).
 Note: UCDDB was preprocessed with the helper functions from preprocess.py rather than `process_subject` (which prints a lot and doesn't save stage).

@@ -3,7 +3,8 @@
 Cleaning: drop unscored windows (stage==""), flat / near-flat windows (z-scored std<0.5 -> all-zero rows),
 non-finite windows, and windows where >50 % of consecutive samples are identical (clipped / stuck).
 Patient split 80/10/10 (seed 0). Output in data/cache/: X_all.f16 (raw memmap), meta.npz.
-The balanced train subset (all positives + 2x negatives per patient) is drawn in common.py from meta.npz.
+Input: data/processed/cinc2018/<rec>.npz from preprocess_cinc2018.py.
+The balanced train subset (all positives + 2x negatives per patient) is drawn by train_rows() in apnea.py from meta.npz.
 """
 from multiprocessing import Pool
 from pathlib import Path
