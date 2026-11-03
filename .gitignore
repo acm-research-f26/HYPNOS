@@ -1,0 +1,27 @@
+
+# Python generated files
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+
+# Local recordings and datasets
+*.wav
+*.mp3
+*.m4a
+APSAA/
+
+# Generated training and prediction data
+training_windows.csv
+train.csv
+val.csv
+test.csv
+training_history.csv
+test_predictions.csv
+test_predictions_tuned.csv
+audio_predictions.csv
+
+# Trained model weights
+*.keras
+*.h5
