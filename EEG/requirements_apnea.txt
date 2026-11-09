@@ -6,3 +6,5 @@ torch
 scikit-learn
 matplotlib
 tqdm
+pyxdf   # device_pipeline.py --xdf
+pylsl   # device_pipeline.py --lsl

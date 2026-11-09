@@ -12,6 +12,7 @@ Results, ablations and caveats are in [RESULTS.md](RESULTS.md); plots are in `pl
 - `build_cache_hp.py`: writes the high-passed cache on disk for low-RAM training (`train --mmap`).
 - `prep_external.py`: UCDDB / MIT-BIH / DREAMS to windows (`--lowpass HZ --out DIR` for other bands).
 - `preprocess.py`: filter / resample / segment / label helpers used by the two scripts above.
+- `device_pipeline.py`: Cerelog headset data (logger CSV, LabRecorder .xdf, or the live LSL stream) to model windows with a causal 5-42 Hz band-pass and mains notch, plus rolling scores. `test_device_pipeline.py` tests it; `replay_check.py` replays MIT-BIH (250 Hz, like the board) through it and compares AUROC with the training-style preparation.
 - `requirements_apnea.txt`: Python packages.
 
 ## Commands
@@ -23,6 +24,8 @@ python build_cache_hp.py 5          # optional, for --hp 5 --mmap
 python apnea.py train NAME [--K 1 --aux --hp 5 --causal --mc --patients 0 --epochs 14]
 python apnea.py score NAME... [--hp HZ --causal]
 python apnea.py report NAME... [--plots FILE]     # several names = ensemble
+python device_pipeline.py --xdf night.xdf --channels 0,1 --model mc_hp5_big   # or --csv LOG.csv / --lsl
+python -m unittest test_device_pipeline
 ```
 `--hp` and `--causal` add a Butterworth high-pass (zero-phase or forward-only) and must match between training and scoring.
 
