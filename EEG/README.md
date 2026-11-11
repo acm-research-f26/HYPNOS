@@ -11,16 +11,20 @@ Check the imports in `cerelog_lsl.py` to identify required packages. Install the
 
 ## Usage
 
-1. Connect and configure the CERELOG/ADS1299 hardware.
-2. From the directory containing the script, run:
+1. Connect to the CERELOG-EEG Board using a usb-c cable
+2. Confirm Power(Green Light is ON)
+3. From the directory containing the script, run:
 
 	```bash
 	python cerelog_lsl.py
 	```
+4. Open the OPENBCI GUI to stream data from the Board - 
+4. Use LSL-compatible LabRecorder to record the published stream.
 
-3. Use an LSL-compatible receiver, such as LabRecorder, to discover and record the published stream.
+## Links
 
-The available options, stream metadata, and device configuration are defined by `cerelog_lsl.py`; consult the script before changing hardware or acquisition settings.
+1. To stream from the cerelog board, download the OPENBCI GUI Dependency:
+
 
 ## Troubleshooting
 
